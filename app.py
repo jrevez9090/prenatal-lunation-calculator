@@ -5,7 +5,6 @@ import swisseph as swe
 
 st.set_page_config(page_title="Prenatal Lunation Calculator", layout="centered")
 
-st.title("Prenatal Lunation Calculator (Valens Method)")
 st.write("Enter birth data to calculate the exact prenatal lunation.")
 st.markdown("---")
 
