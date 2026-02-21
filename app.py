@@ -60,6 +60,7 @@ def find_previous_lunation(jd_birth, phase_type):
     jd_high = jd_birth
     step = 1 / 24  # 1 hour
 
+    # Step backwards to bracket lunation
     while True:
         jd_low = jd_high - step
         diff_high = sun_moon_diff_signed(jd_high)
@@ -98,9 +99,7 @@ def find_previous_lunation(jd_birth, phase_type):
 
 birth_date = st.date_input(
     "Birth Date",
-    value=date(1990, 1, 1),
-    min_value=date(1800, 1, 1),
-    max_value=date(2100, 12, 31)
+    value=date(1500, 1, 1)  # historical-friendly default
 )
 
 col1, col2, col3 = st.columns(3)
@@ -114,7 +113,10 @@ with col2:
 with col3:
     second = st.number_input("Second", 0, 59, 0)
 
-timezone_str = st.text_input("Timezone (example: Europe/Lisbon)", value="Europe/Lisbon")
+timezone_str = st.text_input(
+    "Timezone (example: Europe/Paris, America/Chicago)",
+    value="Europe/Paris"
+)
 
 st.markdown("---")
 
@@ -157,7 +159,7 @@ if st.button("Calculate Prenatal Lunation"):
         st.write(f"Sun: {decimal_to_zodiac(sun)}")
         st.write(f"Moon: {decimal_to_zodiac(moon)}")
 
-        # Correct signed phase detection
+        # Phase detection (signed)
         diff_signed = (moon - sun + 180) % 360 - 180
 
         if diff_signed > 0:
@@ -168,7 +170,7 @@ if st.button("Calculate Prenatal Lunation"):
         st.markdown("### Lunar Phase Classification")
         st.write(phase_type)
 
-        # Find lunation
+        # Find prenatal lunation
         lunation_jd = find_previous_lunation(jd, phase_type)
 
         sun_lun = swe.calc_ut(lunation_jd, swe.SUN)[0][0]
