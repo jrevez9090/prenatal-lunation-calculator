@@ -1,192 +1,163 @@
 import streamlit as st
-from datetime import datetime, date
-import pytz
+from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo, available_timezones
 import swisseph as swe
+import math
 
 st.set_page_config(page_title="Prenatal Lunation Calculator", layout="centered")
 
 st.title("Prenatal Lunation Calculator (Valens Method)")
-st.write("Enter birth data to calculate the exact prenatal lunation.")
-st.markdown("---")
+st.write("Calculate exact prenatal New or Full Moon.")
 
-# ============================
-# ZODIAC UTILITIES
-# ============================
-
-signs = [
-    "Aries", "Taurus", "Gemini", "Cancer",
-    "Leo", "Virgo", "Libra", "Scorpio",
-    "Sagittarius", "Capricorn", "Aquarius", "Pisces"
-]
-
-def decimal_to_zodiac(decimal_degree):
-    decimal_degree = decimal_degree % 360
-    sign_index = int(decimal_degree // 30)
-    sign_name = signs[sign_index]
-
-    degree_in_sign = decimal_degree % 30
-    degrees = int(degree_in_sign)
-
-    minutes_full = (degree_in_sign - degrees) * 60
-    minutes = int(minutes_full)
-
-    seconds = int(round((minutes_full - minutes) * 60))
-
-    if seconds == 60:
-        seconds = 0
-        minutes += 1
-    if minutes == 60:
-        minutes = 0
-        degrees += 1
-    if degrees == 30:
-        degrees = 0
-        sign_index = (sign_index + 1) % 12
-        sign_name = signs[sign_index]
-
-    return f"{degrees:02d}º{minutes:02d}'{seconds:02d}'' {sign_name}"
-
-# ============================
-# ASTRONOMICAL FUNCTIONS
-# ============================
-
-def sun_moon_diff_signed(jd):
-    sun = swe.calc_ut(jd, swe.SUN)[0][0]
-    moon = swe.calc_ut(jd, swe.MOON)[0][0]
-    diff = (moon - sun + 180) % 360 - 180
-    return diff
-
-def find_previous_lunation(jd_birth, phase_type):
-
-    jd_high = jd_birth
-    step = 1 / 24  # 1 hour
-
-    # Step backwards to bracket lunation
-    while True:
-        jd_low = jd_high - step
-        diff_high = sun_moon_diff_signed(jd_high)
-        diff_low = sun_moon_diff_signed(jd_low)
-
-        if phase_type == "After New Moon":
-            if diff_high > 0 and diff_low <= 0:
-                break
-        else:
-            if diff_high < 0 and diff_low >= 0:
-                break
-
-        jd_high = jd_low
-
-    # Bisection refinement
-    for _ in range(50):
-        jd_mid = (jd_low + jd_high) / 2
-        diff_mid = sun_moon_diff_signed(jd_mid)
-
-        if phase_type == "After New Moon":
-            if diff_mid > 0:
-                jd_high = jd_mid
-            else:
-                jd_low = jd_mid
-        else:
-            if diff_mid < 0:
-                jd_high = jd_mid
-            else:
-                jd_low = jd_mid
-
-    return (jd_low + jd_high) / 2
-
-# ============================
-# INPUT SECTION
-# ============================
+# ==============================
+# DATE INPUT
+# ==============================
 
 birth_date = st.date_input(
     "Birth Date",
-    value=date(1500, 1, 1),
+    value=date(1990, 1, 1),
     min_value=date(1, 1, 1),
     max_value=date(3000, 12, 31)
 )
 
 col1, col2, col3 = st.columns(3)
+hour = col1.number_input("Hour", 0, 23, 12)
+minute = col2.number_input("Minute", 0, 59, 0)
+second = col3.number_input("Second", 0, 59, 0)
 
-with col1:
-    hour = st.number_input("Hour", 0, 23, 12)
+# ==============================
+# TIMEZONE SELECT
+# ==============================
 
-with col2:
-    minute = st.number_input("Minute", 0, 59, 0)
+timezones = sorted(list(available_timezones()))
+default_index = timezones.index("Europe/Lisbon") if "Europe/Lisbon" in timezones else 0
 
-with col3:
-    second = st.number_input("Second", 0, 59, 0)
+timezone_str = st.selectbox("Select Timezone", timezones, index=default_index)
 
-timezone_str = st.text_input(
-    "Timezone (example: Europe/Paris, America/Chicago)",
-    value="Europe/Paris"
-)
+# ==============================
+# HELPER FUNCTIONS
+# ==============================
 
-st.markdown("---")
+def to_zodiac(deg):
+    signs = [
+        "Aries","Taurus","Gemini","Cancer",
+        "Leo","Virgo","Libra","Scorpio",
+        "Sagittarius","Capricorn","Aquarius","Pisces"
+    ]
+    deg = deg % 360
+    sign_index = int(deg // 30)
+    sign_deg = deg % 30
+    d = int(sign_deg)
+    m_float = (sign_deg - d) * 60
+    m = int(m_float)
+    s = int((m_float - m) * 60)
+    return f"{d:02d}º{m:02d}'{s:02d}'' {signs[sign_index]}"
 
-# ============================
-# MAIN CALCULATION
-# ============================
+def signed_angle_diff(sun, moon):
+    diff = (moon - sun) % 360
+    if diff > 180:
+        diff -= 360
+    return diff
 
-if st.button("Calculate Prenatal Lunation"):
+def find_exact_lunation(jd_birth, phase="new"):
+    step = 0.1
+    jd = jd_birth
+
+    while True:
+        jd -= step
+        sun = swe.calc_ut(jd, swe.SUN)[0][0]
+        moon = swe.calc_ut(jd, swe.MOON)[0][0]
+        diff = signed_angle_diff(sun, moon)
+
+        if phase == "new":
+            if abs(diff) < 1:
+                break
+        else:
+            if abs(abs(diff) - 180) < 1:
+                break
+
+    # refine
+    step = 0.001
+    while True:
+        jd -= step
+        sun = swe.calc_ut(jd, swe.SUN)[0][0]
+        moon = swe.calc_ut(jd, swe.MOON)[0][0]
+        diff = signed_angle_diff(sun, moon)
+
+        if phase == "new":
+            if abs(diff) < 0.01:
+                break
+        else:
+            if abs(abs(diff) - 180) < 0.01:
+                break
+
+    return jd
+
+# ==============================
+# CALCULATION
+# ==============================
+
+if st.button("Calculate"):
 
     try:
-        tz = pytz.timezone(timezone_str)
-
         local_dt = datetime(
             birth_date.year,
             birth_date.month,
             birth_date.day,
-            int(hour),
-            int(minute),
-            int(second)
+            hour,
+            minute,
+            second,
+            tzinfo=ZoneInfo(timezone_str)
         )
 
-        local_dt = tz.localize(local_dt)
-        utc_dt = local_dt.astimezone(pytz.utc)
-
+        utc_dt = local_dt.astimezone(ZoneInfo("UTC"))
         st.success("Birth data successfully converted to UTC.")
         st.write("UTC time:", utc_dt)
 
-        jd = swe.julday(
+        jd_birth = swe.julday(
             utc_dt.year,
             utc_dt.month,
             utc_dt.day,
-            utc_dt.hour + utc_dt.minute / 60.0 + utc_dt.second / 3600.0
+            utc_dt.hour + utc_dt.minute/60 + utc_dt.second/3600
         )
 
         # Natal positions
-        sun = swe.calc_ut(jd, swe.SUN)[0][0]
-        moon = swe.calc_ut(jd, swe.MOON)[0][0]
+        sun_nat = swe.calc_ut(jd_birth, swe.SUN)[0][0]
+        moon_nat = swe.calc_ut(jd_birth, swe.MOON)[0][0]
 
-        st.markdown("### Natal Positions")
-        st.write(f"Sun: {decimal_to_zodiac(sun)}")
-        st.write(f"Moon: {decimal_to_zodiac(moon)}")
+        st.header("Natal Positions")
+        st.write("Sun:", to_zodiac(sun_nat))
+        st.write("Moon:", to_zodiac(moon_nat))
 
-        # Phase detection (signed)
-        diff_signed = (moon - sun + 180) % 360 - 180
+        # Phase classification
+        diff = signed_angle_diff(sun_nat, moon_nat)
 
-        if diff_signed > 0:
-            phase_type = "After New Moon"
+        if abs(diff) < 90:
+            phase = "new"
+            st.header("Lunar Phase Classification")
+            st.write("After New Moon")
         else:
-            phase_type = "After Full Moon"
+            phase = "full"
+            st.header("Lunar Phase Classification")
+            st.write("After Full Moon")
 
-        st.markdown("### Lunar Phase Classification")
-        st.write(phase_type)
+        # Find exact prenatal lunation
+        jd_lun = find_exact_lunation(jd_birth, phase)
 
-        # Find prenatal lunation
-        lunation_jd = find_previous_lunation(jd, phase_type)
+        y, m, d, h = swe.revjul(jd_lun)
+        hour_lun = int(h)
+        minute_lun = int((h - hour_lun) * 60)
 
-        sun_lun = swe.calc_ut(lunation_jd, swe.SUN)[0][0]
-        moon_lun = swe.calc_ut(lunation_jd, swe.MOON)[0][0]
+        sun_lun = swe.calc_ut(jd_lun, swe.SUN)[0][0]
+        moon_lun = swe.calc_ut(jd_lun, swe.MOON)[0][0]
 
-        y, m, d, ut = swe.revjul(lunation_jd)
-        h = int(ut)
-        min_lun = int((ut - h) * 60)
+        st.header("Exact Prenatal Lunation")
+        st.write(f"Date (UTC): {y}-{m:02d}-{d:02d}")
+        st.write(f"Time (UTC): {hour_lun:02d}:{minute_lun:02d}")
 
-        st.markdown("### Exact Prenatal Lunation")
-        st.write(f"Date (UTC): {int(y)}-{int(m):02d}-{int(d):02d}")
-        st.write(f"Time (UTC): {h:02d}:{min_lun:02d}")
-        st.write(f"Sun at Lunation: {decimal_to_zodiac(sun_lun)}")
-        st.write(f"Moon at Lunation: {decimal_to_zodiac(moon_lun)}")
+        st.write("Sun at Lunation:", to_zodiac(sun_lun))
+        st.write("Moon at Lunation:", to_zodiac(moon_lun))
 
-    except Exception:
-        st.error("Invalid input or calculation error.")
+    except Exception as e:
+        st.error("Calculation error.")
+        st.write(str(e))
