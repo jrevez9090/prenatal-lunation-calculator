@@ -53,26 +53,53 @@ def separation(jd):
     return (moon - sun) % 360
 
 def find_previous_lunation(jd_birth, phase):
-    synodic_month = 29.530588
-    jd_guess = jd_birth - synodic_month
+    step = 0.5
+    jd = jd_birth
+    previous_sep = separation(jd)
 
-    best_jd = jd_guess
-    best_val = 999
-
-    for i in range(-1000, 1000):
-        jd = jd_guess + (i * 0.002)
-        sep = separation(jd)
+    # Procurar para trás até encontrar mudança de fase
+    while True:
+        jd -= step
+        current_sep = separation(jd)
 
         if phase == "new":
-            val = min(sep, 360 - sep)
+            crossed = (previous_sep < 180 and current_sep > 180)
         else:
-            val = abs(sep - 180)
+            crossed = abs(previous_sep - 180) < 90 and abs(current_sep - 180) > 90
 
-        if val < best_val:
-            best_val = val
-            best_jd = jd
+        if crossed:
+            break
 
-    return best_jd
+        previous_sep = current_sep
+
+    # Refinamento fino por bissecção
+    low = jd
+    high = jd + step
+
+    for _ in range(40):
+        mid = (low + high) / 2
+        sep_mid = separation(mid)
+
+        if phase == "new":
+            target = min(sep_mid, 360 - sep_mid)
+        else:
+            target = abs(sep_mid - 180)
+
+        if target < 0.00001:
+            return mid
+
+        if phase == "new":
+            if sep_mid > 180:
+                low = mid
+            else:
+                high = mid
+        else:
+            if sep_mid > 180:
+                high = mid
+            else:
+                low = mid
+
+    return mid
 
 # ==============================
 # CALCULATION
