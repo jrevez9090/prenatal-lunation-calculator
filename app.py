@@ -164,3 +164,7 @@ if st.button("Calculate"):
     st.write(f"Time (UTC): {hour_lun:02d}:{minute_lun:02d}:{second_lun:02d}")
     st.write("Sun at Lunation:", to_zodiac(sun_lun))
     st.write("Moon at Lunation:", to_zodiac(moon_lun))
+
+    except Exception as e:
+        st.error("Calculation error.")
+        st.write(str(e))
