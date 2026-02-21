@@ -99,7 +99,9 @@ def find_previous_lunation(jd_birth, phase_type):
 
 birth_date = st.date_input(
     "Birth Date",
-    value=date(1500, 1, 1)  # historical-friendly default
+    value=date(1500, 1, 1),
+    min_value=date(1, 1, 1),
+    max_value=date(3000, 12, 31)
 )
 
 col1, col2, col3 = st.columns(3)
