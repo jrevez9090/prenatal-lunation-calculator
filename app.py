@@ -2,7 +2,6 @@ import streamlit as st
 from datetime import datetime, date
 import pytz
 import swisseph as swe
-import math
 
 st.set_page_config(page_title="Prenatal Lunation Calculator", layout="centered")
 
@@ -51,52 +50,50 @@ def decimal_to_zodiac(decimal_degree):
 # ASTRONOMICAL FUNCTIONS
 # ============================
 
-def sun_moon_diff(jd):
+def sun_moon_diff_signed(jd):
     sun = swe.calc_ut(jd, swe.SUN)[0][0]
     moon = swe.calc_ut(jd, swe.MOON)[0][0]
-    return (moon - sun) % 360
+    diff = (moon - sun + 180) % 360 - 180
+    return diff
 
 
 def find_previous_lunation(jd_birth, phase_type):
-    jd = jd_birth
+
+    jd_high = jd_birth
     step = 1 / 24  # 1 hour
 
-    if phase_type == "After New Moon":
-        target_angle = 0
-    else:
-        target_angle = 180
-
-    prev_diff = sun_moon_diff(jd)
-
-    # Step backwards until crossing detected
+    # Step backwards until we bracket the event
     while True:
-        jd -= step
-        current_diff = sun_moon_diff(jd)
+        jd_low = jd_high - step
+        diff_high = sun_moon_diff_signed(jd_high)
+        diff_low = sun_moon_diff_signed(jd_low)
 
         if phase_type == "After New Moon":
-            if current_diff > prev_diff:
+            if diff_high > 0 and diff_low <= 0:
                 break
         else:
-            if abs(current_diff - 180) < abs(prev_diff - 180):
+            if diff_high < 0 and diff_low >= 0:
                 break
 
-        prev_diff = current_diff
+        jd_high = jd_low
 
-    # Refine to minute precision
-    minute_step = 1 / (24 * 60)
-
-    for _ in range(180):  # search max 3 hours for precision
-        jd -= minute_step
-        diff = sun_moon_diff(jd)
+    # Bisection refinement
+    for _ in range(50):
+        jd_mid = (jd_low + jd_high) / 2
+        diff_mid = sun_moon_diff_signed(jd_mid)
 
         if phase_type == "After New Moon":
-            if diff < 1:
-                break
+            if diff_mid > 0:
+                jd_high = jd_mid
+            else:
+                jd_low = jd_mid
         else:
-            if abs(diff - 180) < 1:
-                break
+            if diff_mid < 0:
+                jd_high = jd_mid
+            else:
+                jd_low = jd_mid
 
-    return jd
+    return (jd_low + jd_high) / 2
 
 
 # ============================
@@ -156,6 +153,7 @@ if st.button("Calculate Prenatal Lunation"):
             utc_dt.hour + utc_dt.minute / 60.0 + utc_dt.second / 3600.0
         )
 
+        # Natal positions
         sun = swe.calc_ut(jd, swe.SUN)[0][0]
         moon = swe.calc_ut(jd, swe.MOON)[0][0]
 
@@ -169,7 +167,7 @@ if st.button("Calculate Prenatal Lunation"):
         st.markdown("### Lunar Phase Classification")
         st.write(phase_type)
 
-        # Find lunation
+        # Find exact lunation
         lunation_jd = find_previous_lunation(jd, phase_type)
 
         sun_lun = swe.calc_ut(lunation_jd, swe.SUN)[0][0]
@@ -179,7 +177,7 @@ if st.button("Calculate Prenatal Lunation"):
         h = int(ut)
         min_lun = int((ut - h) * 60)
 
-        st.markdown("### Prenatal Lunation Found")
+        st.markdown("### Exact Prenatal Lunation")
         st.write(f"Date (UTC): {int(y)}-{int(m):02d}-{int(d):02d}")
         st.write(f"Time (UTC): {h:02d}:{min_lun:02d}")
         st.write(f"Sun at Lunation: {decimal_to_zodiac(sun_lun)}")
