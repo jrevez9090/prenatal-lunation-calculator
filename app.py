@@ -2,11 +2,12 @@ import streamlit as st
 from datetime import datetime, date
 from zoneinfo import ZoneInfo, available_timezones
 import swisseph as swe
+import math
 
 st.set_page_config(page_title="Prenatal Lunation Calculator", layout="centered")
 
 st.title("Prenatal Lunation Calculator (Valens Method)")
-st.write("Calculate the exact prenatal New or Full Moon immediately preceding birth.")
+st.write("Find the exact prenatal New or Full Moon immediately before birth.")
 
 # ==============================
 # INPUT
@@ -47,47 +48,61 @@ def to_zodiac(deg):
     s = int((m_float - m) * 60)
     return f"{d:02d}º{m:02d}'{s:02d}'' {signs[sign_index]}"
 
-def find_last_lunation(jd_birth, phase):
-    step = 0.25  # 6 horas
+def separation(jd):
+    sun = swe.calc_ut(jd, swe.SUN)[0][0]
+    moon = swe.calc_ut(jd, swe.MOON)[0][0]
+    return (moon - sun) % 360
+
+def find_previous_lunation(jd_birth, phase):
+    """
+    Procura a lunação imediatamente anterior ao nascimento
+    usando minimização real da separação.
+    """
+    search_days = 40
+    step = 0.1  # 2.4 horas
+
+    best_jd = None
+    best_value = 999
+
     jd = jd_birth
-    prev_diff = None
+    end = jd_birth - search_days
 
-    while True:
+    while jd > end:
         jd -= step
-        sun = swe.calc_ut(jd, swe.SUN)[0][0]
-        moon = swe.calc_ut(jd, swe.MOON)[0][0]
-        diff = (moon - sun) % 360
-
-        if prev_diff is not None:
-
-            if phase == "new":
-                # detect crossing near 0°
-                if prev_diff > 300 and diff < 60:
-                    break
-
-            else:
-                # detect crossing near 180°
-                if (prev_diff < 180 and diff >= 180) or (prev_diff > 180 and diff <= 180):
-                    break
-
-        prev_diff = diff
-
-    # refine search
-    step = 0.01
-    for _ in range(1000):
-        jd -= step
-        sun = swe.calc_ut(jd, swe.SUN)[0][0]
-        moon = swe.calc_ut(jd, swe.MOON)[0][0]
-        diff = (moon - sun) % 360
+        sep = separation(jd)
 
         if phase == "new":
-            if abs(diff) < 0.001 or abs(diff - 360) < 0.001:
-                break
+            value = min(sep, 360 - sep)  # distância ao 0°
         else:
-            if abs(diff - 180) < 0.001:
-                break
+            value = abs(sep - 180)
 
-    return jd
+        if value < best_value:
+            best_value = value
+            best_jd = jd
+
+    # refinamento fino
+    step = 0.001
+    for _ in range(2000):
+        left = best_jd - step
+        right = best_jd + step
+
+        if phase == "new":
+            val_left = min(separation(left), 360 - separation(left))
+            val_right = min(separation(right), 360 - separation(right))
+        else:
+            val_left = abs(separation(left) - 180)
+            val_right = abs(separation(right) - 180)
+
+        if val_left < best_value:
+            best_value = val_left
+            best_jd = left
+        elif val_right < best_value:
+            best_value = val_right
+            best_jd = right
+        else:
+            break
+
+    return best_jd
 
 # ==============================
 # CALCULATION
@@ -134,7 +149,7 @@ if st.button("Calculate"):
         st.header("Lunar Phase Classification")
         st.write("After Full Moon")
 
-    jd_lun = find_last_lunation(jd_birth, phase)
+    jd_lun = find_previous_lunation(jd_birth, phase)
 
     y, m, d, h = swe.revjul(jd_lun)
     hour_lun = int(h)
