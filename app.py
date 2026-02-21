@@ -45,7 +45,6 @@ def decimal_to_zodiac(decimal_degree):
 
     return f"{degrees:02d}º{minutes:02d}'{seconds:02d}'' {sign_name}"
 
-
 # ============================
 # ASTRONOMICAL FUNCTIONS
 # ============================
@@ -56,13 +55,11 @@ def sun_moon_diff_signed(jd):
     diff = (moon - sun + 180) % 360 - 180
     return diff
 
-
 def find_previous_lunation(jd_birth, phase_type):
 
     jd_high = jd_birth
     step = 1 / 24  # 1 hour
 
-    # Step backwards until we bracket the event
     while True:
         jd_low = jd_high - step
         diff_high = sun_moon_diff_signed(jd_high)
@@ -94,7 +91,6 @@ def find_previous_lunation(jd_birth, phase_type):
                 jd_low = jd_mid
 
     return (jd_low + jd_high) / 2
-
 
 # ============================
 # INPUT SECTION
@@ -161,17 +157,18 @@ if st.button("Calculate Prenatal Lunation"):
         st.write(f"Sun: {decimal_to_zodiac(sun)}")
         st.write(f"Moon: {decimal_to_zodiac(moon)}")
 
+        # Correct signed phase detection
         diff_signed = (moon - sun + 180) % 360 - 180
 
-if diff_signed > 0:
-    phase_type = "After New Moon"
-else:
-    phase_type = "After Full Moon"
+        if diff_signed > 0:
+            phase_type = "After New Moon"
+        else:
+            phase_type = "After Full Moon"
 
         st.markdown("### Lunar Phase Classification")
         st.write(phase_type)
 
-        # Find exact lunation
+        # Find lunation
         lunation_jd = find_previous_lunation(jd, phase_type)
 
         sun_lun = swe.calc_ut(lunation_jd, swe.SUN)[0][0]
@@ -187,5 +184,5 @@ else:
         st.write(f"Sun at Lunation: {decimal_to_zodiac(sun_lun)}")
         st.write(f"Moon at Lunation: {decimal_to_zodiac(moon_lun)}")
 
-    except Exception as e:
+    except Exception:
         st.error("Invalid input or calculation error.")
