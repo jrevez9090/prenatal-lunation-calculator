@@ -161,8 +161,12 @@ if st.button("Calculate Prenatal Lunation"):
         st.write(f"Sun: {decimal_to_zodiac(sun)}")
         st.write(f"Moon: {decimal_to_zodiac(moon)}")
 
-        diff = (moon - sun) % 360
-        phase_type = "After New Moon" if diff < 180 else "After Full Moon"
+        diff_signed = (moon - sun + 180) % 360 - 180
+
+if diff_signed > 0:
+    phase_type = "After New Moon"
+else:
+    phase_type = "After Full Moon"
 
         st.markdown("### Lunar Phase Classification")
         st.write(phase_type)
