@@ -1,8 +1,7 @@
 import streamlit as st
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from zoneinfo import ZoneInfo, available_timezones
 import swisseph as swe
-import math
 
 st.set_page_config(page_title="Prenatal Lunation Calculator", layout="centered")
 
@@ -10,7 +9,7 @@ st.title("Prenatal Lunation Calculator (Valens Method)")
 st.write("Calculate exact prenatal New or Full Moon.")
 
 # ==============================
-# DATE INPUT
+# INPUT SECTION
 # ==============================
 
 birth_date = st.date_input(
@@ -24,10 +23,6 @@ col1, col2, col3 = st.columns(3)
 hour = col1.number_input("Hour", 0, 23, 12)
 minute = col2.number_input("Minute", 0, 59, 0)
 second = col3.number_input("Second", 0, 59, 0)
-
-# ==============================
-# TIMEZONE SELECT
-# ==============================
 
 timezones = sorted(list(available_timezones()))
 default_index = timezones.index("Europe/Lisbon") if "Europe/Lisbon" in timezones else 0
@@ -53,13 +48,7 @@ def to_zodiac(deg):
     s = int((m_float - m) * 60)
     return f"{d:02d}º{m:02d}'{s:02d}'' {signs[sign_index]}"
 
-def signed_angle_diff(sun, moon):
-    diff = (moon - sun) % 360
-    if diff > 180:
-        diff -= 360
-    return diff
-
-def find_exact_lunation(jd_birth, phase="new"):
+def find_exact_lunation(jd_birth, phase):
     step = 0.1
     jd = jd_birth
 
@@ -67,28 +56,28 @@ def find_exact_lunation(jd_birth, phase="new"):
         jd -= step
         sun = swe.calc_ut(jd, swe.SUN)[0][0]
         moon = swe.calc_ut(jd, swe.MOON)[0][0]
-        diff = signed_angle_diff(sun, moon)
+        diff = (moon - sun) % 360
 
         if phase == "new":
-            if abs(diff) < 1:
+            if diff < 1 or diff > 359:
                 break
         else:
-            if abs(abs(diff) - 180) < 1:
+            if abs(diff - 180) < 1:
                 break
 
-    # refine
+    # refine precision
     step = 0.001
     while True:
         jd -= step
         sun = swe.calc_ut(jd, swe.SUN)[0][0]
         moon = swe.calc_ut(jd, swe.MOON)[0][0]
-        diff = signed_angle_diff(sun, moon)
+        diff = (moon - sun) % 360
 
         if phase == "new":
-            if abs(diff) < 0.01:
+            if diff < 0.01 or diff > 359.99:
                 break
         else:
-            if abs(abs(diff) - 180) < 0.01:
+            if abs(diff - 180) < 0.01:
                 break
 
     return jd
@@ -129,10 +118,13 @@ if st.button("Calculate"):
         st.write("Sun:", to_zodiac(sun_nat))
         st.write("Moon:", to_zodiac(moon_nat))
 
-        # Phase classification
-        diff = signed_angle_diff(sun_nat, moon_nat)
+        # ==========================
+        # CORRECT LUNAR PHASE LOGIC
+        # ==========================
 
-        if abs(diff) < 90:
+        diff = (moon_nat - sun_nat) % 360
+
+        if 0 < diff < 180:
             phase = "new"
             st.header("Lunar Phase Classification")
             st.write("After New Moon")
@@ -147,13 +139,14 @@ if st.button("Calculate"):
         y, m, d, h = swe.revjul(jd_lun)
         hour_lun = int(h)
         minute_lun = int((h - hour_lun) * 60)
+        second_lun = int((((h - hour_lun) * 60) - minute_lun) * 60)
 
         sun_lun = swe.calc_ut(jd_lun, swe.SUN)[0][0]
         moon_lun = swe.calc_ut(jd_lun, swe.MOON)[0][0]
 
         st.header("Exact Prenatal Lunation")
         st.write(f"Date (UTC): {y}-{m:02d}-{d:02d}")
-        st.write(f"Time (UTC): {hour_lun:02d}:{minute_lun:02d}")
+        st.write(f"Time (UTC): {hour_lun:02d}:{minute_lun:02d}:{second_lun:02d}")
 
         st.write("Sun at Lunation:", to_zodiac(sun_lun))
         st.write("Moon at Lunation:", to_zodiac(moon_lun))
