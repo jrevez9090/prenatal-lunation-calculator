@@ -2,7 +2,6 @@ import streamlit as st
 from datetime import datetime, date
 from zoneinfo import ZoneInfo, available_timezones
 import swisseph as swe
-import math
 
 st.set_page_config(page_title="Prenatal Lunation Calculator", layout="centered")
 
@@ -30,7 +29,7 @@ default_index = timezones.index("Europe/Lisbon") if "Europe/Lisbon" in timezones
 timezone_str = st.selectbox("Select Timezone", timezones, index=default_index)
 
 # ==============================
-# HELPERS
+# HELPER FUNCTIONS
 # ==============================
 
 def to_zodiac(deg):
@@ -54,53 +53,24 @@ def separation(jd):
     return (moon - sun) % 360
 
 def find_previous_lunation(jd_birth, phase):
-    """
-    Procura a lunação imediatamente anterior ao nascimento
-    usando minimização real da separação.
-    """
-    search_days = 40
-    step = 0.1  # 2.4 horas
+    synodic_month = 29.530588
+    jd_guess = jd_birth - synodic_month
 
-    best_jd = None
-    best_value = 999
+    best_jd = jd_guess
+    best_val = 999
 
-    jd = jd_birth
-    end = jd_birth - search_days
-
-    while jd > end:
-        jd -= step
+    for i in range(-1000, 1000):
+        jd = jd_guess + (i * 0.002)
         sep = separation(jd)
 
         if phase == "new":
-            value = min(sep, 360 - sep)  # distância ao 0°
+            val = min(sep, 360 - sep)
         else:
-            value = abs(sep - 180)
+            val = abs(sep - 180)
 
-        if value < best_value:
-            best_value = value
+        if val < best_val:
+            best_val = val
             best_jd = jd
-
-    # refinamento fino
-    step = 0.001
-    for _ in range(2000):
-        left = best_jd - step
-        right = best_jd + step
-
-        if phase == "new":
-            val_left = min(separation(left), 360 - separation(left))
-            val_right = min(separation(right), 360 - separation(right))
-        else:
-            val_left = abs(separation(left) - 180)
-            val_right = abs(separation(right) - 180)
-
-        if val_left < best_value:
-            best_value = val_left
-            best_jd = left
-        elif val_right < best_value:
-            best_value = val_right
-            best_jd = right
-        else:
-            break
 
     return best_jd
 
@@ -121,6 +91,7 @@ if st.button("Calculate"):
     )
 
     utc_dt = local_dt.astimezone(ZoneInfo("UTC"))
+
     st.success("Birth data successfully converted to UTC.")
     st.write("UTC time:", utc_dt)
 
@@ -164,7 +135,3 @@ if st.button("Calculate"):
     st.write(f"Time (UTC): {hour_lun:02d}:{minute_lun:02d}:{second_lun:02d}")
     st.write("Sun at Lunation:", to_zodiac(sun_lun))
     st.write("Moon at Lunation:", to_zodiac(moon_lun))
-
-    except Exception as e:
-        st.error("Calculation error.")
-        st.write(str(e))
